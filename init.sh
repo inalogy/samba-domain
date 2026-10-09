@@ -15,6 +15,8 @@ appSetup () {
 	DNSFORWARDER=${DNSFORWARDER:-NONE}
 	HOSTIP=${HOSTIP:-NONE}
 	RPCPORTS=${RPCPORTS:-"49152-49172"}
+	BACKEND_STORE=${BACKEND_STORE:-}
+	BACKEND_STORE_SIZE=${BACKEND_STORE_SIZE:-}
 	DOMAIN_DC=${DOMAIN_DC:-${DOMAIN_DC}}
 	
 	LDOMAIN=${DOMAIN,,}
@@ -36,6 +38,16 @@ appSetup () {
 		HOSTIP_OPTION=""
 	fi
 
+	# Optional database backend (for example BACKEND_STORE=mdb for LMDB). Unset: the options are empty and
+	# provision and join run exactly as before.
+	BACKEND_OPTIONS=""
+	if [[ -n "$BACKEND_STORE" ]]; then
+		BACKEND_OPTIONS="--backend-store=${BACKEND_STORE}"
+		if [[ -n "$BACKEND_STORE_SIZE" ]]; then
+			BACKEND_OPTIONS="${BACKEND_OPTIONS} --backend-store-size=${BACKEND_STORE_SIZE}"
+		fi
+	fi
+
 	# Set up samba
 	mv /etc/krb5.conf /etc/krb5.conf.orig
 	echo "[libdefaults]" > /etc/krb5.conf
@@ -49,12 +61,12 @@ appSetup () {
 		mv /etc/samba/smb.conf /etc/samba/smb.conf.orig
 		if [[ ${JOIN,,} == "true" ]]; then
 			if [[ ${JOINSITE} == "NONE" ]]; then
-				samba-tool domain join ${LDOMAIN} DC -U"${URDOMAIN}\administrator" --password="${DOMAINPASS}" --dns-backend=SAMBA_INTERNAL
+				samba-tool domain join ${LDOMAIN} DC -U"${URDOMAIN}\administrator" --password="${DOMAINPASS}" --dns-backend=SAMBA_INTERNAL ${BACKEND_OPTIONS}
 			else
-				samba-tool domain join ${LDOMAIN} DC -U"${URDOMAIN}\administrator" --password="${DOMAINPASS}" --dns-backend=SAMBA_INTERNAL --site=${JOINSITE}
+				samba-tool domain join ${LDOMAIN} DC -U"${URDOMAIN}\administrator" --password="${DOMAINPASS}" --dns-backend=SAMBA_INTERNAL --site=${JOINSITE} ${BACKEND_OPTIONS}
 			fi
 		else
-			samba-tool domain provision --use-rfc2307 --domain=${URDOMAIN} --realm=${UDOMAIN} --server-role=dc --dns-backend=SAMBA_INTERNAL --adminpass=${DOMAINPASS} ${HOSTIP_OPTION}
+			samba-tool domain provision --use-rfc2307 --domain=${URDOMAIN} --realm=${UDOMAIN} --server-role=dc --dns-backend=SAMBA_INTERNAL --adminpass=${DOMAINPASS} ${HOSTIP_OPTION} ${BACKEND_OPTIONS}
 			if [[ ${NOCOMPLEXITY,,} == "true" ]]; then
 				samba-tool domain passwordsettings set --complexity=off
 				samba-tool domain passwordsettings set --history-length=0
